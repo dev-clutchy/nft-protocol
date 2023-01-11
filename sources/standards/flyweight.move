@@ -39,6 +39,11 @@ module nft_protocol::flyweight {
         data: ID,
     }
 
+    struct LooseNftCertificate<phantom C> has key, store {
+        id: UID,
+        archetype_id: ID,
+    }
+
     struct Archetype<phantom C> has key, store {
         id: UID,
         nft: Nft<C>,
@@ -146,5 +151,11 @@ module nft_protocol::flyweight {
         _mint: &MintCap<C>,
     ): &mut Nft<C> {
         &mut state.nft
+    }
+
+    public fun supply<C>(
+        archetype: &Archetype<C>,
+    ): u64 {
+        supply::max(&archetype.supply)
     }
 }

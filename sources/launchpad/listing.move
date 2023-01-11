@@ -34,7 +34,7 @@ module nft_protocol::listing {
     use nft_protocol::marketplace::{Self as mkt, Marketplace};
     use nft_protocol::proceeds::{Self, Proceeds};
     use nft_protocol::object_box::{Self as obox, ObjectBox};
-    use nft_protocol::warehouse::{Self, Warehouse};
+    use nft_protocol::candy_machine::{Self, CandyMachine};
 
     // === WhitelistCertificate ===
 
@@ -46,7 +46,7 @@ module nft_protocol::listing {
         id: UID,
         /// `Listing` from which this certificate can withdraw an `Nft`
         listing_id: ID,
-        /// `Warehouse` from which this certificate can withdraw an `Nft`
+        /// `CandyMachine` from which this certificate can withdraw an `Nft`
         market_id: ID,
     }
 
@@ -102,7 +102,7 @@ module nft_protocol::listing {
         admin: address,
         /// The address of the receiver of funds
         receiver: address,
-        warehouses: ObjectTable<ID, Warehouse>,
+        candy_machines: ObjectTable<ID, CandyMachine>,
         /// Proceeds object holds the balance of Fungible Tokens acquired from
         /// the sale of the Listing
         proceeds: Proceeds,
@@ -136,7 +136,7 @@ module nft_protocol::listing {
         ctx: &mut TxContext,
     ): Listing {
         let id = object::new(ctx);
-        let warehouses = object_table::new<ID, Warehouse>(ctx);
+        let candy_machines = object_table::new<ID, CandyMachine>(ctx);
 
         event::emit(CreateListingEvent {
             listing_id: object::uid_to_inner(&id),
@@ -147,7 +147,7 @@ module nft_protocol::listing {
             marketplace_id: option::none(),
             admin: listing_admin,
             receiver,
-            warehouses,
+            candy_machines,
             proceeds: proceeds::empty(ctx),
             custom_fee: obox::empty(ctx),
         }
@@ -168,24 +168,26 @@ module nft_protocol::listing {
         transfer::share_object(listing);
     }
 
-    /// Initializes an empty `Warehouse` on `Listing`
-    public entry fun init_warehouse(
+    /// Initializes an empty `CandyMachine` on `Listing`
+    public entry fun init_candy_machine(
         listing: &mut Listing,
+        jit: bool,
         ctx: &mut TxContext,
     ) {
-        create_warehouse(listing, ctx);
+        create_candy_machine(listing, jit, ctx);
     }
 
-    public fun create_warehouse(
+    public fun create_candy_machine(
         listing: &mut Listing,
+        jit: bool,
         ctx: &mut TxContext,
     ): ID {
-        let warehouse = warehouse::new(ctx);
-        let warehouse_id = object::id(&warehouse);
+        let candy_machine = candy_machine::new(jit, ctx);
+        let candy_machine_id = object::id(&candy_machine);
 
-        add_warehouse(listing, warehouse, ctx);
+        add_candy_machine(listing, candy_machine, ctx);
 
-        warehouse_id
+        candy_machine_id
     }
 
     public fun pay<FT>(
@@ -288,59 +290,59 @@ module nft_protocol::listing {
         obox::add<FeeType>(&mut listing.custom_fee, fee);
     }
 
-    public entry fun add_warehouse(
+    public entry fun add_candy_machine(
         listing: &mut Listing,
-        warehouse: Warehouse,
+        candy_machine: CandyMachine,
         ctx: &mut TxContext,
     ) {
         assert_listing_admin(listing, ctx);
 
-        object_table::add<ID, Warehouse>(
-            &mut listing.warehouses,
-            object::id(&warehouse),
-            warehouse,
+        object_table::add<ID, CandyMachine>(
+            &mut listing.candy_machines,
+            object::id(&candy_machine),
+            candy_machine,
         );
     }
 
-    /// Adds a new Market to `markets` and Warehouse to `warehouses` tables
+    /// Adds a new Market to `markets` and CandyMachine to `candy_machines` tables
     public entry fun add_market<Market: key + store>(
         listing: &mut Listing,
-        warehouse_id: ID,
+        candy_machine_id: ID,
         is_whitelisted: bool,
         market: Market,
         ctx: &mut TxContext,
     ) {
         assert_listing_admin(listing, ctx);
 
-        let warehouse = warehouse_mut(listing, warehouse_id);
-        warehouse::add_market(warehouse, is_whitelisted, market);
+        let candy_machine = candy_machine_mut(listing, candy_machine_id);
+        candy_machine::add_market(candy_machine, is_whitelisted, market);
     }
 
     /// Adds NFT as a dynamic child object with its ID as key
     public entry fun add_nft<C>(
         listing: &mut Listing,
-        warehouse_id: ID,
+        candy_machine_id: ID,
         nft: Nft<C>,
         ctx: &mut TxContext,
     ) {
         assert_listing_admin(listing, ctx);
 
-        let warehouse = warehouse_mut(listing, warehouse_id);
-        warehouse::deposit_nft(warehouse, nft);
+        let candy_machine = candy_machine_mut(listing, candy_machine_id);
+        candy_machine::deposit_nft(candy_machine, nft);
     }
 
     /// Set market's live status to `true` therefore making the NFT sale live.
     /// To be called by the `Listing` admin.
     public entry fun sale_on(
         listing: &mut Listing,
-        warehouse_id: ID,
+        candy_machine_id: ID,
         market_id: ID,
         ctx: &mut TxContext,
     ) {
         assert_listing_admin(listing, ctx);
 
-        warehouse::set_live(
-            warehouse_mut(listing, warehouse_id),
+        candy_machine::set_live(
+            candy_machine_mut(listing, candy_machine_id),
             market_id,
             true,
         );
@@ -350,14 +352,14 @@ module nft_protocol::listing {
     /// NFT sale. To be called by the `Listing` admin.
     public entry fun sale_off(
         listing: &mut Listing,
-        warehouse_id: ID,
+        candy_machine_id: ID,
         market_id: ID,
         ctx: &mut TxContext,
     ) {
         assert_listing_admin(listing, ctx);
 
-        warehouse::set_live(
-            warehouse_mut(listing, warehouse_id),
+        candy_machine::set_live(
+            candy_machine_mut(listing, candy_machine_id),
             market_id,
             false,
         );
@@ -368,15 +370,15 @@ module nft_protocol::listing {
     public entry fun sale_on_delegated(
         marketplace: &Marketplace,
         listing: &mut Listing,
-        warehouse_id: ID,
+        candy_machine_id: ID,
         market_id: ID,
         ctx: &mut TxContext,
     ) {
         assert_listing_marketplace_match(marketplace, listing);
         mkt::assert_marketplace_admin(marketplace, ctx);
 
-        warehouse::set_live(
-            warehouse_mut(listing, warehouse_id),
+        candy_machine::set_live(
+            candy_machine_mut(listing, candy_machine_id),
             market_id,
             true,
         );
@@ -387,15 +389,15 @@ module nft_protocol::listing {
     public entry fun sale_off_delegated(
         marketplace: &Marketplace,
         listing: &mut Listing,
-        warehouse_id: ID,
+        candy_machine_id: ID,
         market_id: ID,
         ctx: &mut TxContext,
     ) {
         assert_listing_marketplace_match(marketplace, listing);
         mkt::assert_marketplace_admin(marketplace, ctx);
 
-        warehouse::set_live(
-            warehouse_mut(listing, warehouse_id),
+        candy_machine::set_live(
+            candy_machine_mut(listing, candy_machine_id),
             market_id,
             false,
         );
@@ -450,34 +452,34 @@ module nft_protocol::listing {
         &mut listing.proceeds
     }
 
-    /// Get the Listing's `Warehouse`
-    public fun warehouse(listing: &Listing, warehouse_id: ID): &Warehouse {
-        assert_warehouse(listing, warehouse_id);
-        object_table::borrow(&listing.warehouses, warehouse_id)
+    /// Get the Listing's `CandyMachine`
+    public fun candy_machine(listing: &Listing, candy_machine_id: ID): &CandyMachine {
+        assert_candy_machine(listing, candy_machine_id);
+        object_table::borrow(&listing.candy_machines, candy_machine_id)
     }
 
-    /// Get the Listing's `Warehouse` mutably
-    fun warehouse_mut(listing: &mut Listing, warehouse_id: ID): &mut Warehouse {
-        assert_warehouse(listing, warehouse_id);
-        object_table::borrow_mut(&mut listing.warehouses, warehouse_id)
+    /// Get the Listing's `CandyMachine` mutably
+    fun candy_machine_mut(listing: &mut Listing, candy_machine_id: ID): &mut CandyMachine {
+        assert_candy_machine(listing, candy_machine_id);
+        object_table::borrow_mut(&mut listing.candy_machines, candy_machine_id)
     }
 
-    /// Get the Listing's `Warehouse` mutably
+    /// Get the Listing's `CandyMachine` mutably
     ///
-    /// `Warehouse` is unprotected therefore only market modules registered
-    /// on an `Warehouse` can gain mutable access to it.
-    public fun warehouse_internal_mut<Market: key + store, Witness: drop>(
+    /// `CandyMachine` is unprotected therefore only market modules registered
+    /// on an `CandyMachine` can gain mutable access to it.
+    public fun candy_machine_internal_mut<Market: key + store, Witness: drop>(
         _witness: Witness,
         listing: &mut Listing,
-        warehouse_id: ID,
+        candy_machine_id: ID,
         market_id: ID,
-    ): &mut Warehouse {
+    ): &mut CandyMachine {
         utils::assert_same_module_as_witness<Market, Witness>();
 
-        let warehouse = warehouse_mut(listing, warehouse_id);
-        warehouse::assert_market<Market>(warehouse, market_id);
+        let candy_machine = candy_machine_mut(listing, candy_machine_id);
+        candy_machine::assert_market<Market>(candy_machine, market_id);
 
-        warehouse
+        candy_machine
     }
 
     // === Assertions ===
@@ -519,10 +521,10 @@ module nft_protocol::listing {
         );
     }
 
-    public fun assert_warehouse(listing: &Listing, warehouse_id: ID) {
+    public fun assert_candy_machine(listing: &Listing, candy_machine_id: ID) {
         assert!(
-            object_table::contains(&listing.warehouses, warehouse_id),
-            err::undefined_warehouse(),
+            object_table::contains(&listing.candy_machines, candy_machine_id),
+            err::undefined_candy_machine(),
         );
     }
 
@@ -530,7 +532,7 @@ module nft_protocol::listing {
         market_id: ID,
         certificate: &WhitelistCertificate,
     ) {
-        // Infer that whitelist token corresponds to correct sale warehouse
+        // Infer that whitelist token corresponds to correct sale candy_machine
         assert!(
             certificate.market_id == market_id,
             err::incorrect_whitelist_certificate()

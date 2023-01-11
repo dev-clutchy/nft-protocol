@@ -34,13 +34,6 @@ module nft_protocol::warehouse {
     // sold and currently waiting to be redeemed
     struct Warehouse has key, store {
         id: UID,
-        /// Track which markets are live
-        live: VecMap<ID, bool>,
-        /// Track which markets are whitelisted
-        whitelisted: VecMap<ID, bool>,
-        /// Vector of all markets outlets that, each outles holding IDs
-        /// owned by the warehouse
-        markets: ObjectBag,
         // NFTs that are currently on sale. When a `NftCertificate` is sold,
         // its corresponding NFT ID will be flushed from `nfts` and will be
         // added to `queue`.
@@ -52,9 +45,6 @@ module nft_protocol::warehouse {
     ): Warehouse {
         Warehouse {
             id: object::new(ctx),
-            live: vec_map::empty(),
-            whitelisted: vec_map::empty(),
-            markets: object_bag::new(ctx),
             nfts_on_sale: vector::empty(),
         }
     }
@@ -63,28 +53,6 @@ module nft_protocol::warehouse {
     public entry fun init_warehouse(ctx: &mut TxContext) {
         let warehouse = new(ctx);
         transfer::transfer(warehouse, tx_context::sender(ctx));
-    }
-
-    /// Adds a new market to `Warehouse` allowing NFTs deposited to the
-    /// warehouse to be sold.
-    ///
-    /// Endpoint is unprotected and relies on safely obtaining a mutable
-    /// reference to `Warehouse`.
-    public entry fun add_market<Market: key + store>(
-        warehouse: &mut Warehouse,
-        is_whitelisted: bool,
-        market: Market,
-    ) {
-        let market_id = object::id(&market);
-
-        vec_map::insert(&mut warehouse.live, market_id, false);
-        vec_map::insert(&mut warehouse.whitelisted, market_id, is_whitelisted);
-
-        object_bag::add<ID, Market>(
-            &mut warehouse.markets,
-            market_id,
-            market,
-        );
     }
 
     /// Adds NFT as a dynamic child object with its ID as key and
@@ -138,25 +106,6 @@ module nft_protocol::warehouse {
         transfer::transfer(nft, tx_context::sender(ctx));
     }
 
-    /// Set market's live status
-    public entry fun set_live(
-        warehouse: &mut Warehouse,
-        market_id: ID,
-        is_live: bool,
-    ) {
-        *vec_map::get_mut(&mut warehouse.live, &market_id) = is_live;
-    }
-
-    /// Set market's whitelist status
-    public entry fun set_whitelisted(
-        warehouse: &mut Warehouse,
-        market_id: ID,
-        is_whitelisted: bool,
-    ) {
-        *vec_map::get_mut(&mut warehouse.whitelisted, &market_id) =
-            is_whitelisted;
-    }
-
     // === Getter Functions ===
 
     /// Check how many `nfts` there are to sell
@@ -164,74 +113,7 @@ module nft_protocol::warehouse {
         vector::length(&warehouse.nfts_on_sale)
     }
 
-    /// Get the market's `live` status
-    public fun is_live(warehouse: &Warehouse, market_id: &ID): bool {
-        *vec_map::get(&warehouse.live, market_id)
-    }
-
     public fun is_empty(warehouse: &Warehouse): bool {
         vector::is_empty(&warehouse.nfts_on_sale)
-    }
-
-    public fun is_whitelisted(warehouse: &Warehouse, market_id: &ID): bool {
-        *vec_map::get(&warehouse.whitelisted, market_id)
-    }
-
-    /// Get the `Warehouse` markets
-    public fun markets(warehouse: &Warehouse): &ObjectBag {
-        &warehouse.markets
-    }
-
-    /// Get specific `Warehouse` market
-    public fun market<Market: key + store>(
-        warehouse: &Warehouse,
-        market_id: ID,
-    ): &Market {
-        assert_market<Market>(warehouse, market_id);
-        object_bag::borrow<ID, Market>(&warehouse.markets, market_id)
-    }
-
-    /// Get specific `Warehouse` market mutably
-    ///
-    /// Endpoint is unprotected and relies on safely obtaining a mutable
-    /// reference to `Warehouse`.
-    public fun market_mut<Market: key + store>(
-        warehouse: &mut Warehouse,
-        market_id: ID,
-    ): &mut Market {
-        assert_market<Market>(warehouse, market_id);
-        object_bag::borrow_mut<ID, Market>(&mut warehouse.markets, market_id)
-    }
-
-    // === Assertions ===
-
-    public fun assert_is_live(warehouse: &Warehouse, market_id: &ID) {
-        assert!(is_live(warehouse, market_id), err::listing_not_live());
-    }
-
-    public fun assert_is_whitelisted(warehouse: &Warehouse, market_id: &ID) {
-        assert!(
-            is_whitelisted(warehouse, market_id),
-            err::sale_is_not_whitelisted()
-        );
-    }
-
-    public fun assert_is_not_whitelisted(warehouse: &Warehouse, market_id: &ID) {
-        assert!(
-            !is_whitelisted(warehouse, market_id),
-            err::sale_is_whitelisted()
-        );
-    }
-
-    public fun assert_market<Market: key + store>(
-        warehouse: &Warehouse,
-        market_id: ID,
-    ) {
-        assert!(
-            object_bag::contains_with_type<ID, Market>(
-                &warehouse.markets, market_id
-            ),
-            err::undefined_market(),
-        );
     }
 }
