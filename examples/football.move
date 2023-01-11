@@ -10,7 +10,7 @@ module nft_protocol::football {
     use nft_protocol::royalty;
     use nft_protocol::display;
     use nft_protocol::creators;
-    use nft_protocol::flyweight::{Self, Registry};
+    use nft_protocol::flyweight::{Self, Archetypes};
     use nft_protocol::royalties::{Self, TradePayment};
     use nft_protocol::collection::{Self, Collection, MintCap};
 
@@ -61,14 +61,15 @@ module nft_protocol::football {
         tags::add_tag(&mut tags, tags::art());
         tags::add_collection_tag_domain(&mut collection, &mint_cap, tags);
 
-        let registry = flyweight::init_registry<FOOTBALL>(ctx, &mint_cap);
+        let archetypes = flyweight::init_archetypes<FOOTBALL>(ctx, &mint_cap);
 
-        flyweight::add_archetypes_domain<FOOTBALL>(
-            &mut collection,
-            &mint_cap,
-            registry
-        );
+        // flyweight::add_archetypes_domain<FOOTBALL>(
+        //     &mut collection,
+        //     &mint_cap,
+        //     registry
+        // );
 
+        transfer::transfer(archetypes, tx_context::sender(ctx));
         transfer::transfer(mint_cap, tx_context::sender(ctx));
         transfer::share_object(collection);
     }
@@ -88,14 +89,14 @@ module nft_protocol::football {
         royalties::transfer_remaining_to_beneficiary(Witness {}, payment, ctx);
     }
 
-    public entry fun mint_nft_archetype(
+    public entry fun add_archetype(
         name: String,
         description: String,
         url: vector<u8>,
         attribute_keys: vector<String>,
         attribute_values: vector<String>,
         mint_cap: &MintCap<FOOTBALL>,
-        registry: &mut Registry<FOOTBALL>,
+        archetypes: &mut Archetypes<FOOTBALL>,
         supply: u64,
         ctx: &mut TxContext,
     ) {
@@ -123,9 +124,6 @@ module nft_protocol::football {
             ctx,
         );
 
-        flyweight::add_archetype(archetype, registry, mint_cap);
-
-        // TODO: Define the NFT minting process
-        // lp::add_nft(listing, market_id, nft);
+        flyweight::add_archetype(archetype, archetypes, mint_cap);
     }
 }

@@ -46,7 +46,7 @@ module nft_protocol::flyweight {
         mint_authority: ID,
     }
 
-    struct Registry<phantom C> has key, store {
+    struct Archetypes<phantom C> has key, store {
         id: UID,
         table: ObjectTable<ID, Archetype<C>>,
     }
@@ -85,12 +85,12 @@ module nft_protocol::flyweight {
         }
     }
 
-    /// Create a `Registry` object
-    public fun init_registry<C>(
+    /// Create a `Archetypes` object
+    public fun init_archetypes<C>(
         ctx: &mut TxContext,
         _mint: &MintCap<C>,
-    ): Registry<C> {
-        Registry<C> {
+    ): Archetypes<C> {
+        Archetypes<C> {
             id: object::new(ctx),
             table: object_table::new<ID, Archetype<C>>(ctx),
         }
@@ -98,7 +98,7 @@ module nft_protocol::flyweight {
 
     public fun add_archetype<C>(
         state: Archetype<C>,
-        registry: &mut Registry<C>,
+        registry: &mut Archetypes<C>,
         _mint: &MintCap<C>,
     ) {
         object_table::add<ID, Archetype<C>>(
@@ -130,7 +130,7 @@ module nft_protocol::flyweight {
     public fun add_archetypes_domain<C>(
         collection: &mut Collection<C>,
         mint_cap: &MintCap<C>,
-        registry: Registry<C>,
+        registry: Archetypes<C>,
     ) {
         collection::add_domain(collection, mint_cap, registry);
     }
